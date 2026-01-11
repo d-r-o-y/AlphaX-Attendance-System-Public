@@ -10,6 +10,11 @@ This project implements a **complete end-to-end pipeline**:
 
 ---
 
+## Project Status: ✅ Complete & Deployed
+
+This system is fully implemented, tested, and deployed.
+The core functionality is considered stable.
+
 ## Features
 
 ### ESP32 Attendance Module
