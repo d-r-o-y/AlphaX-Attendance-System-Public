@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AlphaX Attendance System</title>
+
+<style>
+:root {
+  --primary:#1f2937; --accent:#2563eb; --bg:#f8fafc; --border:#d1d5db;
+}
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: var(--bg);
+  margin: 0;
+  padding: 20px;
+}
+h1 { text-align:center; color:var(--primary); }
+
+.controls {
+  display:flex; flex-wrap:wrap; gap:10px;
+  align-items:center;
+  background:#fff; padding:12px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  margin-bottom:12px;
+}
+.controls input, .controls select {
+  padding:6px; border:1px solid var(--border);
+  border-radius:4px;
+}
+button {
+  padding:7px 12px; border:none; border-radius:4px;
+  cursor:pointer; font-size:14px;
+}
+.apply { background:#2563eb; color:#fff; }
+.download { background:#16a34a; color:#fff; }
+.sectionBtn { background:#0f766e; color:#fff; }
+.credits {
+  margin-top: 25px;
+  margin-bottom: 15px;
+  padding-top: 10px;
+  border-top: 1px solid #d1d5db;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+.credits span {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.summary {
+  margin-left:auto;
+  font-weight:600;
+  color:#1f2937;
+}
+
+.table-wrap { overflow-x:auto; }
+table {
+  width:100%; border-collapse:collapse;
+  background:#fff; font-size:14px;
+}
+th, td {
+  border:1px solid var(--border);
+  padding:6px; text-align:center;
+  white-space:nowrap;
+}
+th {
+  background:#f1f5f9;
+  position:sticky; top:0; z-index:2;
+}
+tr:nth-child(even){ background:#f9fafb; }
+.present { color:#16a34a; font-weight:bold; }
+.absent { color:#dc2626; font-weight:bold; }
+</style>
+</head>
+
+<body>
+
+<h1>AlphaX Attendance System</h1>
+<div class="credits">
+  AlphaX • Created by 
+  <a href="https://github.com/d-r-o-y" target="_blank">Dhritiman Roy</a>
+</div>
+<div class="controls">
+  <input id="search" placeholder="Search Roll / Name / Enrollment">
+  <select id="secFilter">
+    <option value="">All Sec</option><option>A</option><option>B</option><option>C</option>
+  </select>
+  <select id="statusFilter">
+    <option value="">All</option>
+    <option value="P">Present Only</option>
+    <option value="A">Absent Only</option>
+  </select>
+  <input type="date" id="dateFilter">
+
+  <button class="apply" onclick="loadData()">Apply</button>
+  <button class="download" onclick="downloadCSV()">Download CSV</button>
+  <button class="sectionBtn" onclick="downloadSection('A')">A CSV</button>
+  <button class="sectionBtn" onclick="downloadSection('B')">B CSV</button>
+  <button class="sectionBtn" onclick="downloadSection('C')">C CSV</button>
+
+  <div class="summary" id="summaryBar">
+    Today's Attendance: --
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="table"></table>
+</div>
+
+<script>
+const SUPABASE_URL="https://vxhneezitsskfznguodw.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4aG5lZXppdHNza2Z6bmd1b2R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NDI1NDEsImV4cCI6MjA4MzQxODU0MX0.iTOAMig_-7wuCUgy81dDnAdTgu7F9zUUYgzHwlsuvo4";
+
+document.getElementById("dateFilter").value =
+  new Date().toISOString().split("T")[0];
+
+let rawData=[], renderedRows=[];
+
+async function loadData(){
+  const date=document.getElementById("dateFilter").value;
+  const sec=document.getElementById("secFilter").value;
+
+  let url=`${SUPABASE_URL}/rest/v1/attendance_register?session_date=eq.${date}`;
+  if(sec) url+=`&sec=eq.${sec}`;
+
+  const r=await fetch(url,{
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}
+  });
+  rawData=await r.json();
+  render();
+  updateSummary();
+}
+
+function render(){
+  const table=document.getElementById("table");
+  table.innerHTML="";
+  const search=document.getElementById("search").value.toLowerCase();
+  const statusFilter=document.getElementById("statusFilter").value;
+
+  let students={}, sessions=new Set();
+
+  rawData.forEach(r=>{
+    const key=`${r.session_date}_P${r.period}`;
+    sessions.add(key);
+    if(!students[r.roll]){
+      students[r.roll]={...r, records:{}, total:0, present:0};
+    }
+    students[r.roll].records[key]=r.present?"P":"A";
+    students[r.roll].total++;
+    if(r.present) students[r.roll].present++;
+  });
+
+  const cols=[...sessions].sort();
+  table.innerHTML="<tr><th>Roll</th><th>Name</th><th>Enroll</th><th>Sec</th><th>%</th>"
+    +cols.map(c=>`<th>${c}</th>`).join("")+"</tr>";
+
+  Object.values(students).forEach(s=>{
+    if(search && !(`${s.roll}`+s.name+s.enrollment).toLowerCase().includes(search))return;
+    if(statusFilter && !Object.values(s.records).includes(statusFilter))return;
+
+    const pct=((s.present/s.total)*100||0).toFixed(1);
+    let row=`<tr><td>${s.roll}</td><td>${s.name}</td>
+      <td>${s.enrollment}</td><td>${s.sec}</td><td>${pct}</td>`;
+    cols.forEach(c=>{
+      const v=s.records[c];
+      row+=v==="P"?`<td class="present">P</td>`:
+           v==="A"?`<td class="absent">A</td>`:"<td>-</td>";
+    });
+    row+="</tr>";
+    table.innerHTML+=row;
+  });
+}
+
+function updateSummary(){
+  const summary={A:{p:0,t:0},B:{p:0,t:0},C:{p:0,t:0}};
+  rawData.forEach(r=>{
+    const s=summary[r.sec];
+    s.t=Math.max(s.t, r.total_students||0);
+    if(r.present) s.p=Math.max(s.p, s.p+1);
+  });
+  document.getElementById("summaryBar").innerText=
+    `Today's Attendance: A ${summary.A.p}/80 | B ${summary.B.p}/80 | C ${summary.C.p}/76`;
+}
+function generateCSV(data, filename) {
+  if (data.length === 0) return;
+
+  const sessions = [...new Set(
+    data.map(r => `${r.session_date}_P${r.period}`)
+  )].sort();
+
+  const students = {};
+
+  data.forEach(r => {
+    if (!students[r.roll]) {
+      students[r.roll] = {
+        roll: r.roll,
+        name: r.name,
+        enrollment: r.enrollment,
+        sec: r.sec,
+        records: {},
+        total: 0,
+        present: 0
+      };
+    }
+    students[r.roll].records[`${r.session_date}_P${r.period}`] = r.present ? "P" : "A";
+    students[r.roll].total++;
+    if (r.present) students[r.roll].present++;
+  });
+
+  let csv = [];
+  let header = ["Roll","Name","Enrollment","Sec","Attendance %",...sessions];
+  csv.push(header.join(","));
+
+  Object.values(students).forEach(s => {
+    let pct = s.total ? ((s.present/s.total)*100).toFixed(1) : "0";
+    let row = [s.roll,s.name,s.enrollment,s.sec,pct];
+    sessions.forEach(k => row.push(s.records[k] || "-"));
+    csv.push(row.map(v=>`"${v}"`).join(","));
+  });
+
+  const blob = new Blob([csv.join("\n")],{type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function downloadCSV() {
+  generateCSV(rawData, "AlphaX_Attendance.csv");
+}
+
+function downloadSection(sec) {
+  const filtered = rawData.filter(r => r.sec === sec);
+  generateCSV(filtered, `AlphaX_${sec}_Attendance.csv`);
+}
+
+function downloadFromTable(name){
+  let csv=[];
+  document.querySelectorAll("table tr").forEach(r=>{
+    csv.push([...r.children].map(c=>`"${c.innerText}"`).join(","));
+  });
+  const blob=new Blob([csv.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+
+loadData();
+</script>
+
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Arduino build files
+*.bin
+*.elf
+*.hex
+
+# Secrets
+.env
+config.js
+
+# OS junk
+.DS_Store
+Thumbs.db
