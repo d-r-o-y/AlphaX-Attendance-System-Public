@@ -117,6 +117,7 @@ document.getElementById("dateFilter").value =
   new Date().toISOString().split("T")[0];
 
 let rawData=[], renderedRows=[];
+let allData = [];
 
 async function loadData(){
   const date=document.getElementById("dateFilter").value;
@@ -131,7 +132,29 @@ async function loadData(){
   rawData=await r.json();
   render();
   updateSummary();
+  
+
 }
+
+async function fetchAllData() {
+  let url = `${SUPABASE_URL}/rest/v1/attendance_register?order=session_date.asc,period.asc`;
+
+  const r = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: "Bearer " + SUPABASE_KEY
+    }
+  });
+
+  if (!r.ok) {
+    alert("Failed to fetch full attendance data");
+    console.error(await r.text());
+    return;
+  }
+
+  allData = await r.json();
+}
+
 
 function render(){
   const table=document.getElementById("table");
@@ -228,13 +251,26 @@ function generateCSV(data, filename) {
 }
 
 function downloadCSV() {
-  generateCSV(rawData, "AlphaX_Attendance.csv");
+  
+  if (allData.length === 0) {
+    alert("No data available for download");
+    return;
+  }
+  generateCSV(allData, "AlphaX_Attendance_All.csv");
 }
 
+
 function downloadSection(sec) {
-  const filtered = rawData.filter(r => r.sec === sec);
-  generateCSV(filtered, `AlphaX_${sec}_Attendance.csv`);
+  const filtered = allData.filter(r => r.sec === sec);
+
+  if (filtered.length === 0) {
+    alert(`No records found for Section ${sec}`);
+    return;
+  }
+
+  generateCSV(filtered, `AlphaX_${sec}_Attendance_All.csv`);
 }
+
 
 function downloadFromTable(name){
   let csv=[];
@@ -246,7 +282,12 @@ function downloadFromTable(name){
   a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
 
-loadData();
+// loadData();
+document.addEventListener("DOMContentLoaded", async () => {
+  await fetchAllData();   // fetch full history once
+  await loadData();       // fetch today's data for display
+});
+
 </script>
 
 
